@@ -17,11 +17,23 @@
 fusion.url=https://fusion.exemplo.com/fusion
 
 # ---------------------------------------------------------------------------
-# Banco de dados (MySQL somente leitura nas tabelas utilizadas)
+# Banco de dados (somente leitura nas tabelas utilizadas)
 # ---------------------------------------------------------------------------
-db.url=jdbc:mysql://servidor-exemplo:3306/fusion
+# db.type e opcional: quando ausente, o tipo e deduzido do prefixo de db.url
+# (jdbc:mysql: ou jdbc:postgresql:). Valores aceitos: mysql | postgresql.
+# A deducao preserva a compatibilidade com arquivos de instalacoes anteriores.
+# db.type=mysql
+
+# MySQL (porta padrao 3306)
+db.url=jdbc:mysql://servidor-exemplo:3306/fusion?sslMode=VERIFY_IDENTITY
 db.user=fusion_readonly
 db.password=
+
+# PostgreSQL (porta padrao 5432) - use no lugar do bloco MySQL acima
+# db.type=postgresql
+# db.url=jdbc:postgresql://servidor-exemplo:5432/fusion?sslmode=verify-full
+# db.user=fusion_readonly
+# db.password=
 
 # ---------------------------------------------------------------------------
 # SMTP (STARTTLS com autenticacao)

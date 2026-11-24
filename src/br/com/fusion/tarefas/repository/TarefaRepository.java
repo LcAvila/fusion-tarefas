@@ -2,7 +2,6 @@ package br.com.fusion.tarefas.repository;
 
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
@@ -13,19 +12,18 @@ import java.util.Set;
 import java.util.Map;
 
 import br.com.fusion.tarefas.config.AppConfig;
+import br.com.fusion.tarefas.config.BancoDados;
 import br.com.fusion.tarefas.model.TarefaNotificacao;
 import br.com.fusion.tarefas.model.DestinatarioNotificacao;
 
 public class TarefaRepository {
 
-    private final String jdbcUrl;
-    private final String jdbcUser;
-    private final String jdbcPassword;
+    private final AppConfig config;
+    private final String tipoBanco;
 
     public TarefaRepository(AppConfig config) {
-        this.jdbcUrl = config.required("db.url");
-        this.jdbcUser = config.required("db.user");
-        this.jdbcPassword = config.required("db.password");
+        this.config = config;
+        this.tipoBanco = BancoDados.tipo(config);
     }
 
     public TarefaRepository(Path arquivoConfig) throws Exception {
@@ -33,12 +31,7 @@ public class TarefaRepository {
     }
 
     private Connection conectar() throws Exception {
-        Class.forName("com.mysql.cj.jdbc.Driver");
-        return DriverManager.getConnection(
-            jdbcUrl,
-            jdbcUser,
-            jdbcPassword
-        );
+        return BancoDados.conectar(config);
     }
 
     public TarefaNotificacao buscarPorTaskInstanceId(
@@ -62,7 +55,7 @@ public class TarefaRepository {
           + "UATUAL.fullname AS responsavel, "
           + "UATUAL.email AS email, "
           + "TI.dueDate AS vencimento, "
-          + "TIMESTAMPDIFF(DAY, TI.dueDate, NOW()) AS diasAtraso "
+          + BancoDados.diasAtraso(tipoBanco, "TI.dueDate") + " AS diasAtraso "
           + "FROM taskinstance TI "
           + "INNER JOIN wfprocess WFP "
           + "ON WFP.neoId = TI.processId "

@@ -19,7 +19,7 @@ Fusion (webapps/fusion)
    └── /custom/task-notification                     → TaskNotificationServlet (POST)
             │                     │
             ▼                     ▼
-        MySQL (Fusion)        SMTP (Jakarta Mail)
+   Banco do Fusion (MySQL/PostgreSQL)   SMTP (Jakarta Mail)
 ```
 
 ## Componentes
@@ -31,6 +31,8 @@ Fusion (webapps/fusion)
 | `web/css/style.css` | Estilos da tela. |
 | `controller.TaskNotificationServlet` | Endpoint `/custom/task-notification`. No `POST`, verifica autenticação, autorização e mesma origem, valida os identificadores e dispara os e-mails. |
 | `repository.TarefaRepository` | Acesso ao banco do Fusion (consultas parametrizadas) e resolução dos destinatários. |
+| `repository.TarefasSql` | Montagem centralizada das consultas parametrizadas (contagem, listagem, valores distintos), reutilizada pela JSP, pelo repositório e pela validação do instalador. |
+| `config.BancoDados` | Detecção do banco (MySQL ou PostgreSQL) e trechos de SQL específicos de cada dialeto (funções de data e predicado de "ativo"). |
 | `security.Autorizacao` | Identifica o usuário (principal/remote user/atributos de sessão) e verifica se pertence ao grupo administrativo. |
 | `config.AppConfig` | Leitura do arquivo de propriedades externo. |
 | `model.*` | Estruturas de dados: `TarefaNotificacao`, `DestinatarioNotificacao`, `ResultadoEnvioNotificacao`. |
@@ -79,7 +81,14 @@ As consultas usam as tabelas do Fusion, entre elas:
   responsáveis por papel.
 
 As consultas usam `PreparedStatement` e parâmetros vinculados, evitando
-concatenação direta de valores.
+concatenação direta de valores, e funcionam tanto em MySQL quanto em PostgreSQL.
+As diferenças de dialeto ficam isoladas em `config.BancoDados` e a montagem das
+consultas em `repository.TarefasSql`; nenhuma estrutura ou dado do Fusion é
+alterado (apenas `SELECT`).
+
+No PostgreSQL, os identificadores não aspados são convertidos para minúsculas
+(`neoId` → `neoid`); as consultas usam os nomes sem aspas e correspondem ao
+esquema do Fusion quando criado com a mesma convenção.
 
 ## Segurança
 

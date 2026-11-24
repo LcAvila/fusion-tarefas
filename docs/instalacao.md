@@ -11,10 +11,11 @@ No servidor:
 - Fusion Platform em execução, com contexto expandido em `webapps/fusion`.
 - Tomcat compatível com Jakarta (10.1 no ambiente testado).
 - JDK com `javac` e `javap` acessível pelo processo do Fusion.
-- Bibliotecas no Fusion: `servlet-api.jar` (Tomcat) e, em `WEB-INF/lib`, MySQL
-  Connector/J, Jakarta Mail API, Angus Mail, Jakarta Activation API e Angus
+- Bibliotecas no Fusion: `servlet-api.jar` (Tomcat) e, em `WEB-INF/lib`, o
+  driver JDBC do banco utilizado (MySQL Connector/J **ou** o driver JDBC do
+  PostgreSQL), Jakarta Mail API, Angus Mail, Jakarta Activation API e Angus
   Activation.
-- Banco MySQL acessível com conta dedicada de leitura.
+- Banco MySQL **ou** PostgreSQL acessível com conta dedicada de leitura.
 - SMTP com STARTTLS e autenticação.
 
 No cliente (para instalação remota):
@@ -56,18 +57,27 @@ porta (padrão 22). Confirme a identidade do servidor SSH.
 
 A conexão remota usa uma **única sessão SSH interativa** (`ssh -tt`), sem
 multiplexação (`ControlMaster`/`ControlPersist`) e sem `sshpass`. A senha SSH é
-solicitada uma única vez e a senha `sudo`, no máximo uma vez. O pacote e o
-instalador são enviados codificados em base64 dentro dessa sessão, o que
-preserva a integridade dos arquivos binários mesmo trafegando por um terminal;
-ao final do envio o terminal é liberado para os prompts interativos (credenciais
-MySQL e SMTP lidas de `/dev/tty`). Nenhuma senha é armazenada e os arquivos
-temporários (locais e remotos) são removidos ao término.
+solicitada uma única vez e a senha `sudo`, no máximo uma vez. Ao abrir a sessão,
+o servidor desliga o eco do pseudo-terminal e envia um marcador de sincronização
+(um byte de controle); só então o cliente envia o pacote e o instalador
+codificados em base64. O eco visível passa a vir do terminal local do cliente,
+de modo que tudo o que você digita (URL, escolhas, usuários) aparece na tela
+enquanto o conteúdo Base64 permanece oculto. Nas senhas (`sudo`, banco e SMTP),
+o servidor sinaliza o cliente para desligar o eco local apenas durante a
+digitação. A sessão permanece aberta após o envio para atender a todos os prompts
+interativos (tipo de banco quando não detectável, credenciais do banco e de SMTP,
+lidas de `/dev/tty`).
+O estado do terminal é restaurado ao final, em sucesso, erro ou interrupção.
+Nenhuma senha é armazenada e os arquivos temporários (locais e remotos) são
+removidos ao término.
 
 ### O que o instalador faz
 
-1. Abre uma única sessão SSH interativa e transfere, codificados em base64, o
-   pacote e o próprio instalador para um diretório temporário no servidor.
-2. Confere o SHA-256 do pacote transferido.
+1. Abre uma única sessão SSH interativa, aguarda a sincronização e transfere,
+   codificados em base64 e sem exibi-los na tela, o pacote e o próprio
+   instalador para um diretório temporário no servidor.
+2. Confere o SHA-256 do instalador e do pacote transferidos antes de qualquer
+   execução privilegiada.
 3. Interrompe se outra instalação estiver em andamento.
 4. Extrai o pacote com validações (sem links, caminhos absolutos, travessia de
    diretório ou entradas duplicadas).
@@ -75,18 +85,28 @@ temporários (locais e remotos) são removidos ao término.
    `web/tarefas-atrasadas.jsp`.
 6. Deteta o processo Tomcat do Fusion (`-Dcatalina.base`, contexto
    `webapps/fusion`), o JDK utilizado, o proprietário e o serviço `systemd`.
-7. Verifica `servlet-api.jar` e as bibliotecas Java necessárias.
-8. Compila todas as classes Java em um diretório temporário. Se a compilação
+7. Detecta o banco de dados do Fusion (MySQL ou PostgreSQL) a partir das
+   configurações existentes; se não for possível detectar, pergunta a você qual
+   banco é utilizado. Define a porta padrão (3306 ou 5432), monta a URL JDBC e
+   seleciona o driver correspondente.
+8. Verifica `servlet-api.jar` e as bibliotecas Java necessárias, incluindo o
+   driver JDBC do banco selecionado (e **somente** ele): a dependência
+   obrigatória do MySQL é removida quando o ambiente usa PostgreSQL.
+9. Compila todas as classes Java em um diretório temporário. Se a compilação
    falhar, a instalação é interrompida sem alterar o ambiente.
-9. Cria um backup em `/var/backups/fusion-tarefas.*` antes de modificar qualquer
-   arquivo.
-10. Prepara ou preserva o arquivo externo de propriedades, atualizando apenas
-    `fusion.url`.
-11. Confirma, com você, a autorização para parar o serviço, publicar e
+10. Cria um backup em `/var/backups/fusion-tarefas.*` antes de modificar qualquer
+    arquivo.
+11. Prepara ou preserva o arquivo externo de propriedades, atualizando apenas
+    `fusion.url` (e o tipo/URL do banco quando necessário); as demais
+    propriedades de instalações anteriores são preservadas.
+12. **Valida a conexão e todas as consultas do recurso** contra o banco
+    informado, em modo somente leitura, **antes** de publicar qualquer arquivo.
+    Se a validação falhar, a publicação é abortada sem alterar o ambiente.
+13. Confirma, com você, a autorização para parar o serviço, publicar e
     reiniciar.
-12. Publica os recursos web em `webapps/fusion/custom/fusion-tarefas` e as
+14. Publica os recursos web em `webapps/fusion/custom/fusion-tarefas` e as
     classes compiladas em `webapps/fusion/WEB-INF/classes/br/com/fusion/tarefas`.
-13. Ajusta proprietário e permissões e apresenta os endereços de teste e as
+15. Ajusta proprietário e permissões e apresenta os endereços de teste e as
     instruções de rollback.
 
 ### Sobres systemd
@@ -102,8 +122,12 @@ configuração manual. Ele não presume o mecanismo de inicialização.
 - O PID do Fusion, se mais de um processo for detectado.
 - O nome do serviço, se não for possível derivá-lo do `cgroup`.
 - A URL pública do Fusion, na forma `https://servidor/fusion`.
-
-O instalador **não solicita** senhas de banco de dados nem de SMTP.
+- O tipo de banco (`[1] MySQL` / `[2] PostgreSQL`), apenas quando não for
+  possível detectá-lo automaticamente.
+- As credenciais de banco de dados e de SMTP, quando o arquivo de propriedades
+  ainda não as contém. Os prompts são lidos de `/dev/tty`; apenas as senhas são
+  digitadas sem eco (o servidor sinaliza o cliente durante a digitação), para não
+  aparecerem na tela nem no terminal remoto.
 
 ## Instalação manual
 

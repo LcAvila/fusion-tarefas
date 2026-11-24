@@ -3,11 +3,11 @@ package br.com.fusion.tarefas.security;
 import java.lang.reflect.Method;
 import java.security.Principal;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 import br.com.fusion.tarefas.config.AppConfig;
+import br.com.fusion.tarefas.config.BancoDados;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
@@ -92,6 +92,9 @@ public final class Autorizacao {
 
         String valor = identificador.trim();
 
+        String tipo = BancoDados.tipo(config);
+        String grupoAtivo = BancoDados.ativo(tipo, "GrupoSE.active");
+
         String sqlNeoId =
             "SELECT COUNT(*) AS autorizado FROM neouser U "
           + "INNER JOIN securityentity UsuarioSE "
@@ -99,7 +102,7 @@ public final class Autorizacao {
           + "INNER JOIN securityentity GrupoSE "
           + "ON GrupoSE.neoId = U.group_neoId "
           + "WHERE UsuarioSE.neoId = ? "
-          + "AND GrupoSE.code = ? AND GrupoSE.active = 1";
+          + "AND GrupoSE.code = ? AND " + grupoAtivo;
 
         String sqlCodigo =
             "SELECT COUNT(*) AS autorizado FROM neouser U "
@@ -108,14 +111,9 @@ public final class Autorizacao {
           + "INNER JOIN securityentity GrupoSE "
           + "ON GrupoSE.neoId = U.group_neoId "
           + "WHERE UsuarioSE.code = ? "
-          + "AND GrupoSE.code = ? AND GrupoSE.active = 1";
+          + "AND GrupoSE.code = ? AND " + grupoAtivo;
 
-        Class.forName("com.mysql.cj.jdbc.Driver");
-
-        try (Connection connection = DriverManager.getConnection(
-                config.required("db.url"),
-                config.required("db.user"),
-                config.required("db.password"))) {
+        try (Connection connection = BancoDados.conectar(config)) {
 
             if (valor.matches("\\d+")) {
                 try (PreparedStatement statement =

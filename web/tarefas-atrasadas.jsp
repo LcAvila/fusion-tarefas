@@ -2,7 +2,6 @@
     pageEncoding="UTF-8" session="true"%>
 
 <%@ page import="java.sql.Connection"%>
-<%@ page import="java.sql.DriverManager"%>
 <%@ page import="java.sql.PreparedStatement"%>
 <%@ page import="java.sql.ResultSet"%>
 <%@ page import="java.util.ArrayList"%>
@@ -15,6 +14,8 @@
 <%@ page import="jakarta.servlet.http.HttpServletResponse"%>
 <%@ page import="java.nio.file.Paths"%>
 <%@ page import="br.com.fusion.tarefas.config.AppConfig"%>
+<%@ page import="br.com.fusion.tarefas.config.BancoDados"%>
+<%@ page import="br.com.fusion.tarefas.repository.TarefasSql"%>
 
 <%!
 private AppConfig carregarConfig() throws Exception {
@@ -30,114 +31,27 @@ private AppConfig carregarConfig() throws Exception {
 }
 
 private Connection conectar() throws Exception {
-    AppConfig config = carregarConfig();
-    Class.forName("com.mysql.cj.jdbc.Driver");
-
-    return DriverManager.getConnection(
-        config.required("db.url"),
-        config.required("db.user"),
-        config.required("db.password")
-    );
+    return BancoDados.conectar(carregarConfig());
 }
 
-private void adicionarFiltros(
-        StringBuilder sql,
-        List<Object> parametros,
-        String solicitante,
-        String processo,
-        String nomeTarefa,
-        String dataInicio,
-        String dataFim,
-        Integer atrasoMin,
-        Integer atrasoMax) {
-
-    if (solicitante != null && !solicitante.trim().isEmpty()) {
-        sql.append("AND U_REQ.fullname LIKE ? ");
-        parametros.add("%" + solicitante.trim() + "%");
-    }
-
-    if (processo != null && !processo.trim().isEmpty()) {
-        sql.append("AND PM.title LIKE ? ");
-        parametros.add("%" + processo.trim() + "%");
-    }
-
-    if (nomeTarefa != null && !nomeTarefa.trim().isEmpty()) {
-        sql.append("AND TI.taskName LIKE ? ");
-        parametros.add("%" + nomeTarefa.trim() + "%");
-    }
-
-    if (dataInicio != null && !dataInicio.trim().isEmpty()) {
-        sql.append("AND WFP.startDate >= ? ");
-        parametros.add(java.sql.Date.valueOf(dataInicio));
-    }
-
-    if (dataFim != null && !dataFim.trim().isEmpty()) {
-        sql.append("AND WFP.startDate < DATE_ADD(?, INTERVAL 1 DAY) ");
-        parametros.add(java.sql.Date.valueOf(dataFim));
-    }
-
-    if (atrasoMin != null) {
-        sql.append("AND TIMESTAMPDIFF(DAY, TI.dueDate, NOW()) >= ? ");
-        parametros.add(atrasoMin);
-    }
-
-    if (atrasoMax != null) {
-        sql.append("AND TIMESTAMPDIFF(DAY, TI.dueDate, NOW()) <= ? ");
-        parametros.add(atrasoMax);
-    }
-}
-
-private void aplicarParametros(
-        PreparedStatement statement,
-        List<Object> parametros) throws Exception {
-
-    for (int i = 0; i < parametros.size(); i++) {
-        Object parametro = parametros.get(i);
-
-        if (parametro instanceof java.sql.Date) {
-            statement.setDate(i + 1, (java.sql.Date) parametro);
-        } else if (parametro instanceof Integer) {
-            statement.setInt(i + 1, (Integer) parametro);
-        } else if (parametro instanceof Long) {
-            statement.setLong(i + 1, (Long) parametro);
-        } else {
-            statement.setString(
-                i + 1,
-                parametro == null ? null : parametro.toString()
-            );
-        }
-    }
-}
-
-private String baseSql() {
-    return "FROM wfprocess WFP "
-        + "INNER JOIN processmodel PM ON PM.neoId = WFP.model_neoId "
-        + "INNER JOIN taskinstance TI ON TI.processId = WFP.neoId "
-        + "LEFT JOIN neouser U_REQ ON U_REQ.neoId = WFP.requester_neoId "
-        + "LEFT JOIN neouser U_ATUAL ON U_ATUAL.neoId = TI.owner_neoId "
-        + "WHERE WFP.processState = 0 "
-        + "AND TI.status IN (0,1,2,3) "
-        + "AND TI.dueDate IS NOT NULL "
-        + "AND TI.dueDate < NOW() ";
-}
+/* A montagem do SQL e a vinculação de parâmetros ficaram centralizadas em
+ * br.com.fusion.tarefas.repository.TarefasSql, que isola as diferenças entre
+ * MySQL e PostgreSQL (funções de data, valor nulo e predicado de "ativo"). */
 
 private int contarTotal(
+        String tipo,
         String solicitante, String processo, String nomeTarefa,
         String dataInicio, String dataFim,
         Integer atrasoMin, Integer atrasoMax) throws Exception {
 
-    StringBuilder sql = new StringBuilder(
-        "SELECT COUNT(*) AS total " + baseSql()
-    );
-
-    List<Object> parametros = new ArrayList<>();
-    adicionarFiltros(sql, parametros, solicitante, processo, nomeTarefa,
+    TarefasSql.Consulta consulta = TarefasSql.contar(
+        tipo, solicitante, processo, nomeTarefa,
         dataInicio, dataFim, atrasoMin, atrasoMax);
 
     try (Connection connection = conectar();
          PreparedStatement statement =
-             connection.prepareStatement(sql.toString())) {
-        aplicarParametros(statement, parametros);
+             connection.prepareStatement(consulta.getSql())) {
+        TarefasSql.aplicar(statement, consulta.getParametros());
 
         try (ResultSet resultSet = statement.executeQuery()) {
             return resultSet.next() ? resultSet.getInt("total") : 0;
@@ -146,45 +60,22 @@ private int contarTotal(
 }
 
 private List<Map<String, String>> consultar(
+        String tipo,
         String solicitante, String processo, String nomeTarefa,
         String dataInicio, String dataFim,
         Integer atrasoMin, Integer atrasoMax,
         int limite, int offset) throws Exception {
 
-    StringBuilder sql = new StringBuilder(
-        "SELECT "
-      + "WFP.neoId AS process_id, "
-      + "TI.id AS task_instance_id, "
-      + "TI.task_neoId AS task_id, "
-      + "TI.activity_neoId AS activity_id, "
-      + "PM.title AS processo, "
-      + "WFP.code AS protocolo, "
-      + "U_REQ.fullname AS solicitante, "
-      + "IFNULL(U_ATUAL.fullname, 'Tarefa não atribuída') AS responsavel, "
-      + "U_ATUAL.neoId AS responsavel_neoId, "
-      + "U_ATUAL.email AS email_responsavel, "
-      + "WFP.startDate AS data_solicitacao, "
-      + "TI.taskName AS tarefa, "
-      + "TI.dueDate AS data_vencimento, "
-      + "TIMESTAMPDIFF(DAY, TI.dueDate, NOW()) AS dias_atraso, "
-      + "WFP.entityTitle AS descricao "
-      + baseSql()
-    );
-
-    List<Object> parametros = new ArrayList<>();
-    adicionarFiltros(sql, parametros, solicitante, processo, nomeTarefa,
-        dataInicio, dataFim, atrasoMin, atrasoMax);
-
-    sql.append("ORDER BY TI.dueDate ASC LIMIT ? OFFSET ?");
-    parametros.add(limite);
-    parametros.add(offset);
+    TarefasSql.Consulta consulta = TarefasSql.listar(
+        tipo, solicitante, processo, nomeTarefa,
+        dataInicio, dataFim, atrasoMin, atrasoMax, limite, offset);
 
     List<Map<String, String>> lista = new ArrayList<>();
 
     try (Connection connection = conectar();
          PreparedStatement statement =
-             connection.prepareStatement(sql.toString())) {
-        aplicarParametros(statement, parametros);
+             connection.prepareStatement(consulta.getSql())) {
+        TarefasSql.aplicar(statement, consulta.getParametros());
 
         try (ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
@@ -217,15 +108,15 @@ private List<Map<String, String>> consultar(
     return lista;
 }
 
-private Set<String> valoresDistintos(String coluna) throws Exception {
+private Set<String> valoresDistintos(
+        String tipo, String coluna) throws Exception {
     Set<String> valores = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 
-    String sql = "SELECT DISTINCT " + coluna + " AS valor "
-        + baseSql()
-        + "AND " + coluna + " IS NOT NULL AND " + coluna + " <> ''";
+    TarefasSql.Consulta consulta = TarefasSql.valoresDistintos(tipo, coluna);
 
     try (Connection connection = conectar();
-         PreparedStatement statement = connection.prepareStatement(sql);
+         PreparedStatement statement =
+             connection.prepareStatement(consulta.getSql());
          ResultSet resultSet = statement.executeQuery()) {
 
         while (resultSet.next()) {
@@ -316,6 +207,7 @@ final int tamanhoPagina = 20;
 int paginaAtual = 1;
 Integer atrasoMin = null;
 Integer atrasoMax = null;
+String tipo = null;
 String erro = null;
 
 List<Map<String, String>> tarefas = new ArrayList<>();
@@ -374,8 +266,10 @@ try {
 
     if (paginaAtual < 1) paginaAtual = 1;
 
+    tipo = BancoDados.tipo(carregarConfig());
+
     totalRegistros = contarTotal(
-        solicitante, processo, nomeTarefa,
+        tipo, solicitante, processo, nomeTarefa,
         dataInicio, dataFim, atrasoMin, atrasoMax
     );
 
@@ -387,14 +281,14 @@ try {
     if (paginaAtual > totalPaginas) paginaAtual = totalPaginas;
 
     tarefas = consultar(
-        solicitante, processo, nomeTarefa,
+        tipo, solicitante, processo, nomeTarefa,
         dataInicio, dataFim, atrasoMin, atrasoMax,
         tamanhoPagina, (paginaAtual - 1) * tamanhoPagina
     );
 
-    solicitantes = valoresDistintos("U_REQ.fullname");
-    processos = valoresDistintos("PM.title");
-    tarefasDisponiveis = valoresDistintos("TI.taskName");
+    solicitantes = valoresDistintos(tipo, "U_REQ.fullname");
+    processos = valoresDistintos(tipo, "PM.title");
+    tarefasDisponiveis = valoresDistintos(tipo, "TI.taskName");
 } catch (Exception e) {
     erro = e.getMessage();
     if (erro == null || erro.trim().isEmpty()) {

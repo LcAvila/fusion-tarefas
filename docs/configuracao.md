@@ -1,8 +1,9 @@
 # Configuração
 
 O Fusion Tarefas lê um único arquivo de propriedades Java, mantido **fora** do
-diretório web. As credenciais de banco de dados e SMTP são preenchidas
-manualmente; o instalador não as solicita.
+diretório web. As credenciais de banco de dados e SMTP podem ser preenchidas
+manualmente ou durante a instalação (o instalador solicita os dados de conexão),
+mas o arquivo nunca é publicado no diretório web.
 
 ## Localização do arquivo
 
@@ -32,7 +33,8 @@ autorizada após alterar o arranque.
 | Propriedade | Obrigatória | Descrição |
 |---|---|---|
 | `fusion.url` | Sim | URL pública do Fusion, incluindo o contexto, sem barra final. Ex.: `https://fusion.exemplo.com/fusion`. Usada para montar o link da tarefa no e-mail. |
-| `db.url` | Sim | URL JDBC do MySQL. Ex.: `jdbc:mysql://host:3306/fusion`. |
+| `db.type` | Não | Tipo do banco: `mysql` ou `postgresql`. Quando ausente, é deduzido do prefixo de `db.url` (`jdbc:mysql:` ou `jdbc:postgresql:`), preservando os arquivos de instalações anteriores. |
+| `db.url` | Sim | URL JDBC do banco. MySQL: `jdbc:mysql://host:3306/fusion`. PostgreSQL: `jdbc:postgresql://host:5432/fusion`. |
 | `db.user` | Sim | Usuário do banco, restrito a leitura nas tabelas utilizadas. |
 | `db.password` | Sim | Senha do usuário do banco. |
 | `smtp.host` | Sim | Servidor SMTP. |
@@ -47,10 +49,25 @@ notificação falha de forma controlada.
 
 ## Banco de dados
 
-O acesso é feito via JDBC (MySQL Connector/J) com declarações preparadas. As
-tabelas consultadas dependem do esquema do Fusion, incluindo `taskinstance`,
-`wfprocess`, `processmodel`, `neouser`, `securityentity`, `activity`,
-`activitymodel` e `roletaskassigner_roleset`.
+O recurso é compatível com **MySQL** e **PostgreSQL** e o acesso é feito via
+JDBC com declarações preparadas (apenas `SELECT`). O tipo é definido por
+`db.type` ou deduzido do prefixo de `db.url`; o driver correspondente
+(`com.mysql.cj.jdbc.Driver` ou `org.postgresql.Driver`) precisa estar em
+`WEB-INF/lib`. As tabelas consultadas dependem do esquema do Fusion, incluindo
+`taskinstance`, `wfprocess`, `processmodel`, `neouser`, `securityentity`,
+`activity`, `activitymodel` e `roletaskassigner_roleset`.
+
+As diferenças de dialeto ficam isoladas em
+`br.com.fusion.tarefas.config.BancoDados`. O comportamento é preservado entre os
+bancos: por exemplo, `TIMESTAMPDIFF(DAY, coluna, NOW())` (MySQL) equivale a
+`TRUNC(EXTRACT(EPOCH FROM (NOW() - coluna)) / 86400)` (PostgreSQL), e o
+predicado de coluna ativa usa `= 1` (MySQL) ou `= TRUE` (PostgreSQL).
+
+> **Identificadores no PostgreSQL:** identificadores não aspados são convertidos
+> para minúsculas (`neoId` → `neoid`). As consultas do recurso usam os nomes sem
+> aspas, o que corresponde ao esquema do Fusion quando criado com a mesma
+> convenção. Se o esquema no PostgreSQL usar identificadores aspados em caixa
+> mista, ele precisará ser ajustado (ou as consultas, aspeadas).
 
 Recomendações:
 
@@ -89,9 +106,20 @@ configurado esteja autorizado a enviar pelo servidor.
 
 ```properties
 fusion.url=https://fusion.exemplo.com/fusion
+
+# Banco: use o bloco do MySQL ou o do PostgreSQL.
+# MySQL (porta padrão 3306)
+db.type=mysql
 db.url=jdbc:mysql://servidor-exemplo:3306/fusion
 db.user=fusion_readonly
 db.password=
+
+# PostgreSQL (porta padrão 5432) - use no lugar do bloco MySQL acima
+# db.type=postgresql
+# db.url=jdbc:postgresql://servidor-exemplo:5432/fusion
+# db.user=fusion_readonly
+# db.password=
+
 smtp.host=smtp.exemplo.com
 smtp.port=587
 smtp.username=notificacoes@exemplo.com
