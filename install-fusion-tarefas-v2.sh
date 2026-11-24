@@ -7,7 +7,7 @@ ask(){ local answer; read -r -p "$1" answer </dev/tty; printf '%s' "$answer"; }
 yesno(){ [[ $(ask "$1 [s/N] ") =~ ^[sS]$ ]]; }
 need(){ command -v "$1" >/dev/null || fail "Dependência ausente: $1"; }
 if [[ ${1:-} != --server ]]; then
-  for c in ssh sha256sum tar base64 mkfifo stty; do need "$c"; done
+  for c in ssh sha256sum tar base64 mkfifo stty tee; do need "$c"; done
   archive=${1:-$(ask 'Caminho do arquivo .tar.gz: ')}
   [[ -f $archive ]] || fail 'Pacote não encontrado.'
   if yesno 'Instalar neste computador Linux (sem SSH)?'; then
@@ -15,50 +15,83 @@ if [[ ${1:-} != --server ]]; then
   fi
   host=$(ask 'Servidor (IP ou hostname): '); user=$(ask 'Usuário SSH: '); port=$(ask 'Porta SSH [22]: '); port=${port:-22}
   [[ $host =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ && $user =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$ && $port =~ ^[0-9]{1,5}$ ]] || fail 'Dados SSH inválidos.'
+  [[ -r /dev/tty && -w /dev/tty ]] || fail 'Terminal interativo (/dev/tty) indisponível: a instalação remota exige um terminal.'
   target="$user@$host"
-  relay=
-  bundle=$(mktemp -d); trap 'rm -rf -- "$bundle"' EXIT
+  # Reúne o pacote e o instalador em um único TAR e o codifica em base64, que é
+  # composto apenas de ASCII, uma linha por vez, preservando os binários ao
+  # trafegar pelo terminal.
+  bundle=$(mktemp -d)
   cp -- "$archive" "$bundle/project.tar.gz"; cp -- "$0" "$bundle/install.sh"
   hash=$(sha256sum < "$archive"); hash=${hash%% *}
+  ihash=$(sha256sum < "$0"); ihash=${ihash%% *}
   tar -czf "$bundle/payload.tar.gz" -C "$bundle" project.tar.gz install.sh
-  # base64 mantém o pacote íntegro mesmo trafegando por um terminal (só ASCII).
   base64 < "$bundle/payload.tar.gz" > "$bundle/payload.b64"
-  # Rotina executada no servidor, dentro da única sessão SSH: consome o pacote
-  # até o marcador, decodifica, extrai e chama o instalador (que segue inalterado).
+  rm -f -- "$bundle/payload.tar.gz"
+  # Rotina remota: desliga o eco do pseudo-terminal ANTES de qualquer dado (o
+  # Base64 nunca é reexibido), publica o marcador de sincronização, consome o
+  # pacote até o marcador de fim, valida a integridade e só então chama o
+  # instalador — que segue inalterado — dentro da única sessão SSH.
   remote=$(cat <<'REMOTE'
 umask 077
 stty -echo 2>/dev/null || true
+printf '[fusion-tarefas] SYNC-READY canal pronto; enviando o pacote.\n'
 d=$(mktemp -d /tmp/fusion-tarefas-upload.XXXXXXXX) || { printf 'ERRO: diretório remoto\n' >&2; exit 1; }
-trap 'rm -rf -- "$d"' EXIT HUP INT TERM
+trap 'stty echo 2>/dev/null || true; rm -rf -- "$d"' EXIT HUP INT TERM
 {
   while IFS= read -r line; do
     [ "$line" = __FUSION_PAYLOAD_END__ ] && break
     printf '%s\n' "$line"
   done
-} | base64 -d > "$d/payload.tar.gz" || { stty echo 2>/dev/null || true; printf 'ERRO: transferência do pacote incompleta\n' >&2; exit 1; }
+} | base64 -d > "$d/payload.tar.gz" || { printf 'ERRO: transferência incompleta\n' >&2; exit 1; }
 stty echo 2>/dev/null || true
 tar -xzf "$d/payload.tar.gz" -C "$d" || { printf 'ERRO: pacote inválido\n' >&2; exit 1; }
 rm -f -- "$d/payload.tar.gz"
+printf '%s  %s\n' __IHASH__ "$d/install.sh" | sha256sum -c - >/dev/null 2>&1 || { printf 'ERRO: instalador corrompido\n' >&2; exit 1; }
+printf '%s  %s\n' __HASH__ "$d/project.tar.gz" | sha256sum -c - >/dev/null 2>&1 || { printf 'ERRO: pacote corrompido\n' >&2; exit 1; }
+printf '[fusion-tarefas] SYNC-DONE pacote verificado.\n'
 sudo bash "$d/install.sh" --server "$d/project.tar.gz" __HASH__
 REMOTE
 )
-  remote=${remote/__HASH__/$hash}
-  # A digitação aparece pelo pseudo-terminal remoto; desativamos o eco local para
-  # não duplicar o que é digitado e para ocultar as senhas do sudo/MySQL/SMTP.
-  local_tty=
-  if [[ -t 0 ]]; then local_tty=$(stty -g); stty -echo; fi
-  restore(){ if [[ -n $local_tty ]]; then stty "$local_tty" 2>/dev/null || true; fi; return 0; }
-  fifo="$bundle/in.fifo"; mkfifo "$fifo"
-  # Uma única sessão SSH (-tt força o pseudo-terminal): envia o pacote e, em
-  # seguida, repassa o terminal para os prompts interativos do instalador — uma
-  # senha SSH e, no máximo, uma senha sudo.
-  { cat -- "$bundle/payload.b64"; printf '\n%s\n' __FUSION_PAYLOAD_END__; exec cat; } > "$fifo" &
-  relay=$!
-  trap 'kill "${relay:-}" 2>/dev/null || true; wait "${relay:-}" 2>/dev/null || true; restore; rm -rf -- "$bundle"' EXIT
-  rc=0
-  ssh -tt -p "$port" "$target" "$remote" < "$fifo" || rc=$?
-  kill "$relay" 2>/dev/null || true; wait "$relay" 2>/dev/null || true
-  restore
+  remote=${remote//__IHASH__/$ihash}
+  remote=${remote//__HASH__/$hash}
+  # Estado do terminal preservado e restaurado em sucesso, erro ou interrupção.
+  tty_saved=$(stty -g </dev/tty)
+  in_fifo="$bundle/in.fifo"; out_fifo="$bundle/out.fifo"; ready="$bundle/ready"
+  mkfifo "$in_fifo" "$out_fifo"
+  feeder=; ssh_pid=
+  cleanup(){
+    local rc=$?
+    trap - EXIT INT TERM HUP
+    if [[ -n $feeder ]]; then kill "$feeder" 2>/dev/null || true; wait "$feeder" 2>/dev/null || true; fi
+    if [[ -n $ssh_pid ]]; then kill "$ssh_pid" 2>/dev/null || true; wait "$ssh_pid" 2>/dev/null || true; fi
+    stty "$tty_saved" </dev/tty 2>/dev/null || true
+    rm -rf -- "$bundle"
+    exit "$rc"
+  }
+  trap cleanup EXIT INT TERM HUP
+  # Sem eco local: as senhas (sudo/MySQL/SMTP) não aparecem e não há eco duplo;
+  # o eco dos caracteres digitados passa a vir do pseudo-terminal remoto.
+  stty -echo </dev/tty 2>/dev/null || true
+  # Alimenta o stdin da sessão SSH: aguarda a sincronização, envia o pacote e o
+  # marcador de fim e, então, repassa o teclado lido EXPLICITAMENTE de /dev/tty.
+  (
+    while [[ ! -e $ready ]]; do sleep 0.1; done
+    cat -- "$bundle/payload.b64"
+    printf '\n%s\n' __FUSION_PAYLOAD_END__
+    cat /dev/tty
+  ) > "$in_fifo" &
+  feeder=$!
+  # Uma única conexão SSH com pseudo-terminal forçado (-tt), necessário para o
+  # sudo e para os prompts interativos do instalador.
+  ssh -tt -o ConnectTimeout=15 -p "$port" "$target" "$remote" < "$in_fifo" > "$out_fifo" 2>&1 &
+  ssh_pid=$!
+  # Exibe a saída da sessão em tempo real e habilita a transmissão ao ver o
+  # marcador de sincronização.
+  cat -- "$out_fifo" | tee /dev/tty | while IFS= read -r line; do
+    line=${line%$'\r'}
+    case $line in *SYNC-READY*) : > "$ready" ;; esac
+  done || true
+  rc=0; wait "$ssh_pid" || rc=$?
   [[ $rc == 0 ]] || fail 'A sessão SSH falhou.'
   exit
 fi
