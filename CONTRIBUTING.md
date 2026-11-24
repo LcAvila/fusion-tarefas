@@ -26,7 +26,7 @@ Obrigado pelo interesse em contribuir com o Fusion Tarefas.
 4. Verifique a sintaxe dos scripts alterados:
 
    ```bash
-   bash -n install-fusion-tarefas.sh
+   bash -n install-fusion-tarefas-v2.sh
    bash -n scripts/build-release.sh
    ```
 

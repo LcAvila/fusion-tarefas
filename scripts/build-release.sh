@@ -12,7 +12,7 @@
 #   fusion-tarefas/web/, fusion-tarefas/src/ e
 #   fusion-tarefas/config/fusion-tarefas.properties.example
 #
-# A raiz interna "fusion-tarefas/" é compatível com install-fusion-tarefas.sh,
+# A raiz interna "fusion-tarefas/" é compatível com install-fusion-tarefas-v2.sh,
 # que localiza o projeto por src/br/com/fusion/tarefas + web/tarefas-atrasadas.jsp.
 set -Eeuo pipefail
 

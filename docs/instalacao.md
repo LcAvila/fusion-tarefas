@@ -40,13 +40,13 @@ espera.
 
 ## Instalação automatizada
 
-Coloque `install-fusion-tarefas.sh` e `dist/fusion-tarefas.tar.gz` no mesmo
+Coloque `install-fusion-tarefas-v2.sh` e `dist/fusion-tarefas.tar.gz` no mesmo
 diretório. Use apenas pacotes confiáveis e revisados: o instalador executa
 operações administrativas.
 
 ```bash
-bash -n install-fusion-tarefas.sh
-bash install-fusion-tarefas.sh fusion-tarefas.tar.gz
+bash -n install-fusion-tarefas-v2.sh
+bash install-fusion-tarefas-v2.sh fusion-tarefas.tar.gz
 ```
 
 O script oferece **instalação local** (no próprio computador Linux) ou

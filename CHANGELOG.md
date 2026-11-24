@@ -21,7 +21,7 @@ o estado do código reorganizado; não representam garantias de homologação.
 
 ### Alterado
 
-- Instalador `install-fusion-tarefas.sh` adaptado ao novo layout (`src/` e
+- Instalador `install-fusion-tarefas-v2.sh` adaptado ao novo layout (`src/` e
   `web/`), com detecção de Tomcat/JDK/serviço, verificação de integridade,
   backup antes de alterações e rollback automático em falha de publicação.
 - `TaskNotificationServlet` passou a exigir autenticação no POST, verificação

@@ -81,7 +81,7 @@ fusion-tarefas/
 ├── CONTRIBUTING.md
 ├── SECURITY.md
 ├── .gitignore
-├── install-fusion-tarefas.sh
+├── install-fusion-tarefas-v2.sh
 ├── src/br/com/fusion/tarefas/     # fontes Java
 ├── web/                          # JSP, CSS e JavaScript
 ├── config/                       # exemplo de configuração
@@ -105,12 +105,12 @@ a raiz `fusion-tarefas/`, compatível com o instalador.
 
 ## Instalação automatizada
 
-Coloque `install-fusion-tarefas.sh` e `fusion-tarefas.tar.gz` no mesmo diretório
+Coloque `install-fusion-tarefas-v2.sh` e `fusion-tarefas.tar.gz` no mesmo diretório
 e execute:
 
 ```bash
-bash -n install-fusion-tarefas.sh
-bash install-fusion-tarefas.sh fusion-tarefas.tar.gz
+bash -n install-fusion-tarefas-v2.sh
+bash install-fusion-tarefas-v2.sh fusion-tarefas.tar.gz
 ```
 
 O script oferece instalação local ou remota. Na opção remota, informe
