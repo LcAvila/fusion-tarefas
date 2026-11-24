@@ -24,7 +24,7 @@ Não inclua credenciais, dados pessoais ou informações de clientes no relato.
 - **Autenticação:** o endpoint de notificação e a tela de tarefas exigem usuário
   autenticado no Fusion.
 - **Autorização:** o acesso é restrito ao grupo administrativo configurado
-  (`admG`) por consulta ao banco do Fusion.
+  (`ex: admin`) por consulta ao banco do Fusion.
 - **CSRF:** o POST de notificação exige cabeçalho `X-Requested-With` e valida a
   origem quando os cabeçalhos `Origin`/`Referer` estão presentes.
 - **Validação de entrada:** o identificador de tarefa recebido é validado antes
