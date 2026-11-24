@@ -32,6 +32,16 @@ o estado do código reorganizado; não representam garantias de homologação.
 - `fusion.url` tornou-se propriedade obrigatória, sem valor padrão corporativo.
 - Template de e-mail sem identificação de organização específica.
 
+### Corrigido
+
+- Instalação remota deixou de usar multiplexação SSH
+  (`ControlMaster`/`ControlPersist`/`ControlPath`) e `SCP`, que falhavam no Git
+  Bash para Windows com `mux_client_request_session: read from master failed:
+  Connection reset by peer`. O envio passou a usar uma única sessão SSH
+  interativa (`ssh -tt`), com o pacote e o instalador trafegando em base64 para
+  preservar a integridade, garantindo uma senha SSH e, no máximo, uma senha
+  `sudo`, sem `sshpass` e sem armazenamento de senhas.
+
 ### Removido
 
 - Referências a domínio, caminho e identidade corporativos no código e na

@@ -63,7 +63,8 @@ Detalhes em [docs/arquitetura.md](docs/arquitetura.md).
 - Fusion Platform instalada e em execução, com contexto expandido em
   `webapps/fusion` e Tomcat compatível com Jakarta (10.1 no ambiente testado).
 - JDK com `javac` e `javap` acessível pelo processo do Fusion.
-- Cliente com Bash, SSH, SCP e `sha256sum` (para instalação remota).
+- Cliente com Bash, `ssh`, `sha256sum`, `tar`, `base64`, `mkfifo` e `stty`
+  (para instalação remota). Compatível com Git Bash no Windows e Bash no Linux.
 - Bibliotecas disponíveis no Fusion: `servlet-api.jar` (Tomcat) e, em
   `WEB-INF/lib`, MySQL Connector/J, Jakarta Mail API, Angus Mail, Jakarta
   Activation API e Angus Activation.
@@ -114,10 +115,12 @@ bash install-fusion-tarefas-v2.sh fusion-tarefas.tar.gz
 ```
 
 O script oferece instalação local ou remota. Na opção remota, informe
-hostname/IP, usuário SSH e porta (padrão 22). Informe também a URL pública do
-Fusion, por exemplo `https://fusion.exemplo.com/fusion`. O instalador:
+hostname/IP, usuário SSH e porta (padrão 22). A senha SSH é solicitada uma única
+vez e a senha `sudo`, no máximo uma vez. Informe também a URL pública do Fusion,
+por exemplo `https://fusion.exemplo.com/fusion`. O instalador:
 
-- transfere o pacote e o instalador via SCP e confere o SHA-256;
+- abre uma única sessão SSH interativa e transfere o pacote e o instalador
+  codificados em base64, preservando a integridade e conferindo o SHA-256;
 - extrai o pacote com validações;
 - detecta o Tomcat ativo, o JDK e o serviço `systemd` do Fusion;
 - verifica as bibliotecas necessárias e compila as fontes;

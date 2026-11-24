@@ -19,7 +19,8 @@ No servidor:
 
 No cliente (para instalação remota):
 
-- Bash, `ssh`, `scp` e `sha256sum`.
+- Bash, `ssh`, `sha256sum`, `tar`, `base64`, `mkfifo` e `stty`. Compatível com
+  Git Bash no Windows e Bash no Linux.
 
 ## Empacotamento
 
@@ -53,10 +54,19 @@ O script oferece **instalação local** (no próprio computador Linux) ou
 **remota**. Na remota, informe o IP/hostname do servidor, o usuário SSH e a
 porta (padrão 22). Confirme a identidade do servidor SSH.
 
+A conexão remota usa uma **única sessão SSH interativa** (`ssh -tt`), sem
+multiplexação (`ControlMaster`/`ControlPersist`) e sem `sshpass`. A senha SSH é
+solicitada uma única vez e a senha `sudo`, no máximo uma vez. O pacote e o
+instalador são enviados codificados em base64 dentro dessa sessão, o que
+preserva a integridade dos arquivos binários mesmo trafegando por um terminal;
+ao final do envio o terminal é liberado para os prompts interativos (credenciais
+MySQL e SMTP lidas de `/dev/tty`). Nenhuma senha é armazenada e os arquivos
+temporários (locais e remotos) são removidos ao término.
+
 ### O que o instalador faz
 
-1. Transfere o pacote e o próprio instalador via SSH/SCP para um diretório
-   temporário no servidor.
+1. Abre uma única sessão SSH interativa e transfere, codificados em base64, o
+   pacote e o próprio instalador para um diretório temporário no servidor.
 2. Confere o SHA-256 do pacote transferido.
 3. Interrompe se outra instalação estiver em andamento.
 4. Extrai o pacote com validações (sem links, caminhos absolutos, travessia de
