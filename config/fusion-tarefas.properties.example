@@ -1,0 +1,34 @@
+# Fusion Tarefas - exemplo de configuracao externa
+#
+# Copie este arquivo para um local FORA da pasta web, por exemplo:
+#   /opt/fusion/config/fusion-tarefas.properties
+#
+# Ajuste permissoes (600) e o proprietario para o usuario do processo Fusion.
+# O caminho deve ser informado ao Fusion pela propriedade de sistema:
+#   -Dfusion.config.path=/opt/fusion/config/fusion-tarefas.properties
+#
+# Nao versione este arquivo com valores reais. Mantenha segredos fora do Git.
+
+# ---------------------------------------------------------------------------
+# Fusion
+# ---------------------------------------------------------------------------
+# URL publica do Fusion, incluindo o contexto. Obrigatorio.
+# Sem valor padrao: o endpoint de notificacao exige esta propriedade.
+fusion.url=https://fusion.exemplo.com/fusion
+
+# ---------------------------------------------------------------------------
+# Banco de dados (MySQL somente leitura nas tabelas utilizadas)
+# ---------------------------------------------------------------------------
+db.url=jdbc:mysql://servidor-exemplo:3306/fusion
+db.user=fusion_readonly
+db.password=
+
+# ---------------------------------------------------------------------------
+# SMTP (STARTTLS com autenticacao)
+# ---------------------------------------------------------------------------
+smtp.host=smtp.exemplo.com
+smtp.port=587
+smtp.username=notificacoes@exemplo.com
+smtp.password=
+smtp.from=notificacoes@exemplo.com
+smtp.from.name=Fusion

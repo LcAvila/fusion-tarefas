@@ -1,0 +1,14 @@
+# Normaliza finais de linha para evitar falhas em scripts shell no Linux.
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Arquivos binários não devem ser normalizados.
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

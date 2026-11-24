@@ -1,0 +1,85 @@
+# Fusion Tarefas - arquivos que não devem ser versionados.
+# Mantenha segredos, artefatos de compilação e configurações locais fora do Git.
+
+# -------------------------
+# Java - compilação
+# -------------------------
+*.class
+*.jar
+*.war
+*.ear
+target/
+build/
+out/
+bin/
+
+# -------------------------
+# Pacotes e distribuição
+# -------------------------
+dist/*.tar.gz
+dist/*.tar.gz.sha256
+*.tgz
+*.zip
+
+# -------------------------
+# Backups e temporários
+# -------------------------
+backup/
+backups/
+*.bak
+*.bak[0-9]
+*.orig
+*.rej
+*.tmp
+*~
+*.swp
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+logs/
+
+# -------------------------
+# Configuração privada / segredos
+# -------------------------
+.env
+.env.*
+*.properties
+!config/fusion-tarefas.properties.example
+!**/*.properties.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+credentials*
+secrets*
+
+# -------------------------
+# IDEs e editores
+# -------------------------
+# Eclipse
+.classpath
+.project
+.settings/
+# IntelliJ IDEA
+.idea/
+*.iml
+# VS Code
+.vscode/
+# NetBeans
+nbproject/
+nb-configuration.xml
+
+# -------------------------
+# Sistema operacional
+# -------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -------------------------
+# Origem local (não distribuir)
+# -------------------------
+fusion-tarefas-download.tar.gz
